@@ -19,6 +19,150 @@
 using namespace std;
 enum { NONE, AMBIENT, DIFFUSE, SPECULAR, NUM_MODES };
 
+float random(float lo, float hi, float seed)
+{
+	srand (static_cast<unsigned>(time(0) * (lo + hi + seed)));
+	return lo + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX/(hi - lo)));
+}
+
+class Particle
+{
+public:
+	float mass;
+	vec3 position;
+	vec3 velocity;
+	vec3 force;
+	vec3 color;
+	float d = 0;
+	int collide_count = 0;
+	
+	Particle()
+	{}
+	
+	void Euler_Step(float h)
+	{
+		position = position + (h * velocity);
+		velocity = velocity + ((h/mass) * force);
+		d = d + h;
+	}
+	
+	void Reset_Forces()
+	{
+		force * 0.0;
+	}
+	
+	void Handle_Collision(float damping, float coeff_resititution)
+	{
+		if (position[1] < 0)
+		{
+			position[1] = 0;
+			if (velocity[1] < 0)
+			{
+				velocity[1] = ((-1 * coeff_resititution) * velocity[1]);
+				velocity[0] = damping * velocity[0];
+				velocity[2] = damping * velocity[2];
+				collide_count++;
+			}
+		}
+	}
+	
+	void Reset_Position()
+	{
+		if (collide_count ==  5)
+		{
+			position[0] = random(-0.21,0.24, position[0]);
+			position[1] = 0.10;
+			position[2] = random(-0.23,0.22, position[2]);
+			
+			velocity[0] = 10 * position[0];
+			velocity[1] = random(1.0,10.0, velocity[1]);
+			velocity[2] = 10 * position[2];
+			
+			collide_count = 0;
+			d = 0;
+			
+			color[0] = 200;
+			color[1] = 200;
+			color[2] = 0;
+		}
+	}
+	
+	~Particle()
+	{
+		delete this;
+	}
+
+};
+
+vector<Particle*> particles;
+
+vec3 Get_Particle_Color(float d)
+{
+	vec3 color;
+	if (d < 0.02)
+	{		
+		color[0] = 200;
+		color[1] = 200;
+		color[2] = 0;
+		return color;
+	}
+	else if (d < 1.0)
+	{
+		color[0] = 200 + (25 * d);
+		color[1] = 100 - (25 * d);
+		color[2] = 0;
+		
+		return color;
+	}
+	else if (d < 2)
+	{
+		color[0] = 255;
+		color[1] = 0;
+		color[2] = 0;
+		
+		return color;
+	}
+	else if (d < 3)
+	{
+		color[0] = 200 - (30 * d);
+		color[1] = 1 + (50 * d);
+		color[2] = 1 + (50 * d);
+		
+		return color;
+	}
+	
+	color[0] = 0.5;
+	color[1] = 0.5;
+	color[2] = 0.5;
+	
+	return color;
+}
+
+void Add_Particles(int n)
+{
+	for (int i = 0; i < n; i++)
+	{
+		
+		Particle* particle = new Particle;
+		particle->mass = 1;
+		
+		particle->position[0] = random(-0.21,0.23, i);
+		particle->position[1] = 0.10;
+		particle->position[2] = random(-0.22,0.24, i);
+		
+		particle->velocity[0] = 10 * particle->position[0];
+		particle->velocity[1] = random(1.0,10.0, i);
+		particle->velocity[2] = 10 * particle->position[2];
+		
+		particle->color[0] = 200;
+		particle->color[1] = 200;
+		particle->color[2] = 0;
+		
+		particles.push_back(particle);
+	}
+}
+
+
 void draw_grid(int dim);
 void draw_obj(obj *o, const gl_image_texture_map& textures);
 
@@ -49,6 +193,8 @@ application::~application()
 void application::init_event()
 {
 
+	Add_Particles(100);
+	
     cout << "CAMERA CONTROLS: \n  LMB: Rotate \n  MMB: Move \n  RMB: Zoom" << endl;
     cout << "KEYBOARD CONTROLS: \n";
     cout << "  'p': Pause simulation\n";
@@ -119,30 +265,55 @@ void application::draw_event()
     glLightfv(GL_LIGHT1, GL_POSITION, light_pos1);
 
     if (!paused) {
+		vec3 grav;
         //
         //ADD NEW PARTICLES
-        //
-        //
+
+
         // SIMULATE YOUR PARTICLE HERE.
-        //
-        //
-        //
+        for (size_t i = 0; i < particles.size(); i++)
+		{
+			if (particles.size() < 6000)
+			{
+				Add_Particles(100);
+			}
+			
+			grav[0] = 0.0;
+			grav[1] = -9.8 * particles[i]->mass;
+			grav[2] = 0.0;
+			
+			particles[i]->Reset_Forces();
+			particles[i]->force = grav;
+			particles[i]->Euler_Step(0.01);
+			particles[i]->Handle_Collision(0.3,0.3);
+			particles[i]->Reset_Position();
+			particles[i]->color = Get_Particle_Color(particles[i]->d);
+		}
+		
         // UPDATE THE COLOR OF THE PARTICLE DYNAMICALLY
         //
     }
+	
 
-    glLineWidth(2.0);
-    glEnable(GL_COLOR_MATERIAL);
-    glBegin(GL_LINES);
-        //
-        //
-        // DRAW YOUR PARTICLE USING GL_LINES HERE
-        //
-        // glVertex3f(...) endpoint 1
-        // glVertex3f(...) endpoint 2
-        //
-        //
-    glEnd();
+	glLineWidth(2.0);
+	glEnable(GL_COLOR_MATERIAL);
+	glBegin(GL_LINES);
+		//
+		//
+		// DRAW YOUR PARTICLE USING GL_LINES HERE
+		//
+		// glVertex3f(...) endpoint 1
+		// glVertex3f(...) endpoint 2
+	float f = 0.04;
+	for (size_t i = 0; i < particles.size(); i++)
+	{
+		glColor3f(particles[i]->color[0], particles[i]->color[1], particles[i]->color[2]);
+		glVertex3f(particles[i]->position[0], particles[i]->position[1], particles[i]->position[2]);
+		vec3 endpoint2 = particles[i]->position + ( f * particles[i]->velocity);
+		glVertex3f(endpoint2[0],endpoint2[1],endpoint2[2]);
+	}
+	
+	glEnd();
 
     // draw the volcano
     if(draw_volcano){
